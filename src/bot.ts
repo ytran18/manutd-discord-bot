@@ -39,14 +39,28 @@ client.commands = new Collection<string, Command>();
 
 // Load commands
 const commandsPath = path.join(__dirname, 'commands');
-const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith('.ts'));
+const commandFiles = fs.readdirSync(commandsPath).filter(file => 
+    file.endsWith('.ts') || file.endsWith('.js')
+);
+
+logger.info('Bot', `Loading commands from ${commandsPath}`);
+logger.debug('Bot', 'Found command files:', commandFiles);
 
 for (const file of commandFiles) {
-    const filePath = path.join(commandsPath, file);
-    const command = require(filePath).default as Command;
-    
-    if ('data' in command && 'execute' in command) {
-        client.commands.set(command.data.name, command);
+    try {
+        const filePath = path.join(commandsPath, file);
+        logger.debug('Bot', `Loading command from ${filePath}`);
+        
+        const command = require(filePath).default as Command;
+        
+        if ('data' in command && 'execute' in command) {
+            client.commands.set(command.data.name, command);
+            logger.success('Bot', `Loaded command: ${command.data.name}`);
+        } else {
+            logger.warn('Bot', `Invalid command file: ${file}`);
+        }
+    } catch (error) {
+        logger.error('Bot', `Failed to load command ${file}:`, error);
     }
 }
 
@@ -55,8 +69,10 @@ const rest = new REST({ version: '10' }).setToken(config.discord.token);
 
 (async () => {
     try {
-        logger.info('Bot', 'Refreshing application commands...');
+        logger.info('Bot', 'Started refreshing application commands...');
         const commands = Array.from(client.commands.values()).map(command => command.data.toJSON());
+        
+        logger.debug('Bot', 'Registering commands:', commands);
         
         await rest.put(
             Routes.applicationGuildCommands(
@@ -65,29 +81,38 @@ const rest = new REST({ version: '10' }).setToken(config.discord.token);
             ),
             { body: commands }
         );
-        logger.success('Bot', 'Registered commands successfully!');
+        logger.success('Bot', 'Successfully registered application commands');
     } catch (error) {
-        logger.error('Bot', 'Error when registering commands:', error);
+        logger.error('Bot', 'Failed to register application commands:', error);
     }
 })();
 
 // Event handlers
 client.once('ready', () => {
-    logger.success('Bot', `✅ Bot đã sẵn sàng! Đăng nhập với tên ${client.user?.tag}`);
+    logger.success('Bot', `Logged in as ${client.user?.tag}`);
 });
 
 client.on('interactionCreate', async interaction => {
     if (!interaction.isCommand()) return;
 
     const command = client.commands.get(interaction.commandName);
-    if (!command) return;
+    if (!command) {
+        logger.warn('Bot', `No command matching ${interaction.commandName} was found`);
+        return;
+    }
 
     try {
+        logger.debug('Bot', `Executing command: ${interaction.commandName}`, {
+            user: interaction.user.tag,
+            guild: interaction.guild?.name,
+            channel: interaction.channel?.id
+        });
+        
         await command.execute(interaction);
     } catch (error) {
-        logger.error('Bot', 'Error executing command:', error);
-        const errorMessage = { content: 'Đã xảy ra lỗi khi thực hiện lệnh!', ephemeral: true };
+        logger.error('Bot', `Error executing command ${interaction.commandName}:`, error);
         
+        const errorMessage = { content: 'Đã xảy ra lỗi khi thực hiện lệnh!', ephemeral: true };
         if (interaction.replied || interaction.deferred) {
             await interaction.followUp(errorMessage);
         } else {
@@ -97,4 +122,6 @@ client.on('interactionCreate', async interaction => {
 });
 
 // Start bot
-client.login(config.discord.token); 
+client.login(config.discord.token)
+    .then(() => logger.info('Bot', 'Connecting to Discord...'))
+    .catch(error => logger.error('Bot', 'Failed to connect to Discord:', error)); 
