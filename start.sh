@@ -1,4 +1,4 @@
 #!/bin/bash
 npm install
 npm run build
-npm run prod 
+node dist/bot.js 
