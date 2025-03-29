@@ -1,9 +1,22 @@
 import { Client, Collection, GatewayIntentBits, REST, Routes } from 'discord.js';
+import express, { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import config from './config';
 import { Command } from './types/command';
 import logger from './utils/logger';
+
+// Initialize express
+const app = express();
+const port = process.env.PORT || 3000;
+
+app.get('/', (req: Request, res: Response) => {
+    res.send('Bot is running!');
+});
+
+app.listen(port, () => {
+    logger.info('Express', `Server is running on port ${port}`);
+});
 
 // Extend Client type to include commands
 declare module 'discord.js' {
