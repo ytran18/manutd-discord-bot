@@ -1,10 +1,12 @@
-import { Client, Collection, GatewayIntentBits, REST, Routes } from 'discord.js';
+import { Client, Collection, GatewayIntentBits, REST, Routes, Events } from 'discord.js';
 import express, { Request, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import config from './config';
 import { Command } from './types/command';
 import logger from './utils/logger';
+import cron from 'node-cron';
+import matchNotificationService from './services/matchNotificationService';
 
 // Initialize express
 const app = express();
@@ -88,12 +90,18 @@ const rest = new REST({ version: '10' }).setToken(config.discord.token);
 })();
 
 // Event handlers
-client.once('ready', () => {
+client.once(Events.ClientReady, () => {
     logger.success('Bot', `Logged in as ${client.user?.tag}`);
+    
+    // Set up cron job to check for upcoming matches every hour
+    cron.schedule('0 * * * *', () => {
+        logger.info('Bot', 'Running match notification check');
+        matchNotificationService.checkAndNotify(client);
+    });
 });
 
-client.on('interactionCreate', async interaction => {
-    if (!interaction.isCommand()) return;
+client.on(Events.InteractionCreate, async interaction => {
+    if (!interaction.isChatInputCommand()) return;
 
     const command = client.commands.get(interaction.commandName);
     if (!command) {
